@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <cstring>
@@ -7,6 +8,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <fstream> 
+#include <filesystem>
 
 void executeCommand(const std::vector<std::string>& args, bool runInBackground = false, int pipeTo = -1) {
     pid_t pid = fork();
@@ -59,7 +62,22 @@ void executeCommand(const std::string& command, bool runInBackground = false, in
     while (iss >> arg) {
         args.push_back(arg);
     }
-    executeCommand(args, runInBackground, pipeTo);
+    
+    // 첫 번째 인수로 옵션을 포함하는 경우 분리
+    std::string cmd = args[0];
+    size_t spacePos = cmd.find(' ');
+    std::string cmdName = cmd.substr(0, spacePos);
+    std::string cmdOption = cmd.substr(spacePos + 1);
+
+    // 옵션과 나머지 인수를 별도의 벡터에 저장
+    std::vector<std::string> cmdArgs;
+    cmdArgs.push_back(cmdName);
+    if (!cmdOption.empty()) {
+        cmdArgs.push_back(cmdOption);
+    }
+    cmdArgs.insert(cmdArgs.end(), args.begin() + 1, args.end());
+
+    executeCommand(cmdArgs, runInBackground, pipeTo);
 }
 
 void listFiles(const std::string& directory) {
@@ -79,7 +97,6 @@ void listFiles(const std::string& directory) {
 
 void changeDirectory(const std::string& directory) {
     if (chdir(directory.c_str()) != 0) {
-        std::cerr << "디렉토리를 변경할 수 없습니다." << std::
         std::cerr << "디렉토리를 변경할 수 없습니다." << std::endl;
     }
 }
@@ -126,29 +143,8 @@ void changeFilePermissions(const std::string& filename, const std::string& permi
     executeCommand(args);
 }
 
-void createTarArchive(const std::string& filename, const std::vector<std::string>& files) {
-    std::vector<std::string> args = {"tar", "-cvf", filename};
-    args.insert(args.end(), files.begin(), files.end());
-    executeCommand(args);
-}
-
-void extractTarArchive(const std::string& filename) {
-    std::vector<std::string> args = {"tar", "-xvf", filename};
-    executeCommand(args);
-}
-
 void sed(const std::string& pattern, const std::string& replacement, const std::string& filename) {
     std::vector<std::string> args = {"sed", "-i", "s/" + pattern + "/" + replacement + "/g", filename};
-    executeCommand(args);
-}
-
-void awk(const std::string& pattern, const std::string& filename) {
-    std::vector<std::string> args = {"awk", pattern, filename};
-    executeCommand(args);
-}
-
-void curl(const std::string& url) {
-    std::vector<std::string> args = {"curl", url};
     executeCommand(args);
 }
 
@@ -159,11 +155,6 @@ void find(const std::string& directory, const std::string& filename) {
 
 void sortFile(const std::string& filename) {
     std::vector<std::string> args = {"sort", filename};
-    executeCommand(args);
-}
-
-void renameFile(const std::string& oldname, const std::string& newname) {
-    std::vector<std::string> args = {"mv", oldname, newname};
     executeCommand(args);
 }
 
@@ -178,64 +169,131 @@ void copyFile(const std::string& source, const std::string& destination) {
     executeCommand(args);
 }
 
-int main() {
+void touchFile(const std::string& filename) 
+{
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "파일을 생성할 수 없습니다." << std::endl;
+        return;
+    }
+    file.close();
+}
+
+void catFile(const std::string& fileName) {
+    std::ifstream file(fileName);
+    if (!file.is_open()) {
+        std::cerr << "파일을 열 수 없습니다." << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::cout << line << std::endl;
+    }
+
+    file.close();
+}
+
+void echo(const std::string& text) 
+{
+    std::cout << text << std::endl;
+}
+
+void changeOwnership(const std::string& fileName, const std::string& owner) 
+{
+    if (chown(fileName.c_str(), -1, std::stoi(owner)) != 0) 
+    {
+        std::cerr << "파일의 소유권을 변경할 수 없습니다." << std::endl;
+    }
+}
+
+int main() 
+{
     std::string command;
 
-    while (true) {
+    while (true) 
+    {
         std::cout << "명령어 입력: ";
         std::getline(std::cin, command);
 
-        if (command == "exit") {
+        if (command == "exit") 
+        {
             break;
-        } else if (command.empty()) {
+        } 
+        else if (command.empty()) 
+        {
             continue;
-        } else if (command.substr(0, 3) == "ls ") {
+        } 
+        else if (command.substr(0, 3) == "ls ") 
+        {
             std::string directory = command.substr(3);
             listFiles(directory);
-        } else if (command.substr(0, 3) == "cd ") {
+        } 
+        else if (command.substr(0, 3) == "cd ") 
+        {
             std::string directory = command.substr(3);
             changeDirectory(directory);
-        } else if (command == "pwd") {
+        } 
+        else if (command == "pwd") 
+        {
             std::string currentDirectory = getCurrentDirectory();
             std::cout << currentDirectory << std::endl;
-        } else if (command.substr(0, 6) == "mkdir ") {
+        } 
+        else if (command.substr(0, 6) == "mkdir ") 
+        {
             std::string directory = command.substr(6);
             createDirectory(directory);
-        } else if (command.substr(0, 3) == "rm ") {
+        } 
+        else if (command.substr(0, 3) == "rm ") 
+        {
             std::string filename = command.substr(3);
             removeFile(filename);
-        } else if (command.substr(0, 5) == "grep ") {
+        } 
+        else if (command.substr(0, 3) == "cat") 
+        {
+            std::string fileName = command.substr(4);
+            catFile(fileName);
+        }
+        else if (command.substr(0, 4) == "echo") 
+        {
+            std::string text = command.substr(5);
+            echo(text);
+        }
+        else if (command.substr(0, 5) == "grep ") 
+        {
             std::string patternAndFile = command.substr(5);
             size_t spacePos = patternAndFile.find(' ');
             std::string pattern = patternAndFile.substr(0, spacePos);
             std::string filename = patternAndFile.substr(spacePos + 1);
             grep(pattern, filename);
-        } else if (command == "ps") {
+        } 
+        else if (command == "ps") 
+        {
             ps();
-        } else if (command.substr(0, 5) == "kill ") {
-            int pid = std::stoi(command.substr(5));
-            killProcess(pid);
-        } else if (command.substr(0, 6) == "chmod ") {
+        } 
+        else if (command.substr(0, 6) == "chmod ") 
+        {
             std::string args = command.substr(6);
             size_t spacePos = args.find(' ');
             std::string permissions = args.substr(0, spacePos);
             std::string filename = args.substr(spacePos + 1);
             changeFilePermissions(filename, permissions);
-        } else if (command.substr(0, 4) == "tar ") {
-            std::string args = command.substr(4);
+        } 
+        else if (command.substr(0, 5) == "chown") 
+        {
+            std::string args = command.substr(6);
             size_t spacePos = args.find(' ');
-            std::string option = args.substr(0, spacePos);
-            std::string filename = args.substr(spacePos + 1);
-            if (option == "-c") {
-                std::vector<std::string> files;
-                while (std::getline(std::cin, command) && command != "") {
-                    files.push_back(command);
-                }
-                createTarArchive(filename, files);
-            } else if (option == "-x") {
-                extractTarArchive(filename);
-            }
-        } else if (command.substr(0, 4) == "sed ") {
+            std::string fileName = args.substr(0, spacePos);
+            std::string owner = args.substr(spacePos + 1);
+            changeOwnership(fileName, owner);
+        }
+        else if (command.substr(0, 5) == "kill ") 
+        {
+            int pid = std::stoi(command.substr(5));
+            killProcess(pid);
+        } 
+        else if (command.substr(0, 4) == "sed ") 
+        {
             std::string args = command.substr(4);
             size_t firstSpacePos = args.find(' ');
             size_t secondSpacePos = args.find(' ', firstSpacePos + 1);
@@ -243,43 +301,43 @@ int main() {
             std::string replacement = args.substr(firstSpacePos + 1, secondSpacePos - firstSpacePos - 1);
             std::string filename = args.substr(secondSpacePos + 1);
             sed(pattern, replacement, filename);
-        } else if (command.substr(0, 4) == "awk ") {
-            std::string args = command.substr(4);
-            size_t spacePos = args.find(' ');
-            std::string pattern = args.substr(0, spacePos);
-            std::string filename = args.substr
-            awk(pattern, filename);
-        } else if (command.substr(0, 5) == "curl ") {
-            std::string url = command.substr(5);
-            curl(url);
-        } else if (command.substr(0, 5) == "find ") {
+        } 
+        else if (command.substr(0, 5) == "find ") 
+        {
             std::string args = command.substr(5);
             size_t spacePos = args.find(' ');
             std::string directory = args.substr(0, spacePos);
             std::string filename = args.substr(spacePos + 1);
             find(directory, filename);
-        } else if (command.substr(0, 5) == "sort ") {
+        } 
+        else if (command.substr(0, 5) == "sort ") 
+        {
             std::string filename = command.substr(5);
             sortFile(filename);
-        } else if (command.substr(0, 7) == "rename ") {
-            std::string args = command.substr(7);
-            size_t spacePos = args.find(' ');
-            std::string oldname = args.substr(0, spacePos);
-            std::string newname = args.substr(spacePos + 1);
-            renameFile(oldname, newname);
-        } else if (command.substr(0, 5) == "move ") {
+        } 
+        else if (command.substr(0, 5) == "mv ") 
+        {
             std::string args = command.substr(5);
             size_t spacePos = args.find(' ');
             std::string source = args.substr(0, spacePos);
             std::string destination = args.substr(spacePos + 1);
             moveFile(source, destination);
-        } else if (command.substr(0, 3) == "cp ") {
+        } 
+        else if (command.substr(0, 3) == "cp ") 
+        {
             std::string args = command.substr(3);
             size_t spacePos = args.find(' ');
             std::string source = args.substr(0, spacePos);
             std::string destination = args.substr(spacePos + 1);
             copyFile(source, destination);
-        } else {
+        } 
+        else if (command.substr(0, 6) == "touch ") 
+        {
+            std::string filename = command.substr(6);
+            touchFile(filename);
+        }
+        else 
+        {
             executeCommand(command);
         }
     }
